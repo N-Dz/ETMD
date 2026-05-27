@@ -8,16 +8,16 @@ import streamlit as st
 sys.path.insert(0, os.path.dirname(__file__))
 
 from orchestrator import classify, enrich
-from extractors import pdf_extractor, url_extractor, doi_extractor
+from extractors import pdf_extractor, url_extractor, doi_extractor, txt_extractor, csv_extractor
 from normalizer import normalize
 from serializers import to_json_dc, to_jsonld
 
 st.set_page_config(page_title="Metadata Harvester", layout="centered")
 st.title("Metadata Harvester")
-st.caption("Extract and normalize metadata to Dublin Core. Drop a PDF or paste a URL/DOI — the type is detected automatically.")
+st.caption("Extract and normalize metadata to Dublin Core. Drop a file or paste a URL/DOI — the type is detected automatically.")
 
 # --- Input section ---
-uploaded_file = st.file_uploader("Upload a PDF", type=["pdf"])
+uploaded_file = st.file_uploader("Upload a file (PDF, TXT, CSV)", type=["pdf", "txt", "csv"])
 user_input = st.text_input("Or paste a URL or DOI")
 
 extract_btn = st.button("Extract Metadata", type="primary")
@@ -29,8 +29,17 @@ if extract_btn:
 
     try:
         if uploaded_file:
-            with st.spinner("Reading PDF metadata..."):
-                raw_dict = pdf_extractor.extract(uploaded_file.read())
+            ext = uploaded_file.name.rsplit(".", 1)[-1].lower()
+            file_bytes = uploaded_file.read()
+            if ext == "pdf":
+                with st.spinner("Reading PDF metadata..."):
+                    raw_dict = pdf_extractor.extract(file_bytes)
+            elif ext == "txt":
+                with st.spinner("Reading text file..."):
+                    raw_dict = txt_extractor.extract(file_bytes, uploaded_file.name)
+            elif ext == "csv":
+                with st.spinner("Reading CSV file..."):
+                    raw_dict = csv_extractor.extract(file_bytes, uploaded_file.name)
             input_label = uploaded_file.name
 
         elif user_input:
