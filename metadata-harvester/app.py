@@ -14,19 +14,11 @@ from serializers import to_json_dc, to_jsonld
 
 st.set_page_config(page_title="Metadata Harvester", layout="centered")
 st.title("Metadata Harvester")
-st.caption("Extract and normalize metadata to Dublin Core from a URL, DOI, or PDF.")
+st.caption("Extract and normalize metadata to Dublin Core. Drop a PDF or paste a URL/DOI — the type is detected automatically.")
 
 # --- Input section ---
-input_type = st.radio("Input type", ["URL", "DOI", "PDF"], horizontal=True)
-
-user_input = None
-uploaded_file = None
-
-if input_type == "PDF":
-    uploaded_file = st.file_uploader("Upload a PDF", type=["pdf"])
-else:
-    label = "Enter a URL" if input_type == "URL" else "Enter a DOI (e.g. 10.1038/nature12373)"
-    user_input = st.text_input(label)
+uploaded_file = st.file_uploader("Upload a PDF", type=["pdf"])
+user_input = st.text_input("Or paste a URL or DOI")
 
 extract_btn = st.button("Extract Metadata", type="primary")
 
@@ -36,29 +28,27 @@ if extract_btn:
     input_label = None
 
     try:
-        if input_type == "PDF":
-            if not uploaded_file:
-                st.error("Please upload a PDF file.")
-                st.stop()
+        if uploaded_file:
             with st.spinner("Reading PDF metadata..."):
                 raw_dict = pdf_extractor.extract(uploaded_file.read())
             input_label = uploaded_file.name
 
-        elif input_type == "URL":
-            if not user_input:
-                st.error("Please enter a URL.")
-                st.stop()
-            with st.spinner("Fetching page metadata..."):
-                raw_dict = url_extractor.extract(user_input)
+        elif user_input:
+            with st.spinner("Classifying input..."):
+                input_type = classify(user_input)
+            st.info(f"Detected input type: **{input_type.upper()}**")
+
+            if input_type == "url":
+                with st.spinner("Fetching page metadata..."):
+                    raw_dict = url_extractor.extract(user_input)
+            else:  # doi
+                with st.spinner("Querying CrossRef..."):
+                    raw_dict = doi_extractor.extract(user_input)
             input_label = user_input
 
-        else:  # DOI
-            if not user_input:
-                st.error("Please enter a DOI.")
-                st.stop()
-            with st.spinner("Querying CrossRef..."):
-                raw_dict = doi_extractor.extract(user_input)
-            input_label = user_input
+        else:
+            st.error("Please upload a PDF or enter a URL/DOI.")
+            st.stop()
 
         with st.spinner("Enriching with Gemini..."):
             enriched = enrich(raw_dict)
