@@ -1,6 +1,5 @@
 import json
 import os
-import re
 
 from groq import Groq
 from dotenv import load_dotenv
@@ -16,6 +15,15 @@ def _generate(prompt: str) -> str:
         messages=[{"role": "user", "content": prompt}],
     )
     return response.choices[0].message.content
+
+
+def _generate_json(prompt: str) -> dict:
+    response = _client.chat.completions.create(
+        model=_MODEL,
+        messages=[{"role": "user", "content": prompt}],
+        response_format={"type": "json_object"},
+    )
+    return json.loads(response.choices[0].message.content)
 
 DC_ELEMENTS = [
     "title", "creator", "subject", "description", "publisher",
@@ -50,11 +58,4 @@ def enrich(raw_dict: dict) -> dict:
         f"Return ONLY valid JSON with exactly these keys (omit keys you cannot fill): {keys}\n\n"
         f"Raw metadata:\n{json.dumps(raw_dict, indent=2)}"
     )
-    text = _generate(prompt)
-
-    # Extract the first JSON object from the response
-    match = re.search(r"\{.*\}", text, re.DOTALL)
-    if not match:
-        raise ValueError(f"No JSON found in LLM response: {text!r}")
-
-    return json.loads(match.group())
+    return _generate_json(prompt)
