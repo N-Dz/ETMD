@@ -12,6 +12,17 @@ from extractors import pdf_extractor, url_extractor, doi_extractor, txt_extracto
 from normalizer import normalize
 from serializers import to_json_dc, to_jsonld
 
+FILE_EXTRACTORS = {
+    "pdf": lambda b, n: pdf_extractor.extract(b),
+    "txt": txt_extractor.extract,
+    "csv": csv_extractor.extract,
+}
+
+TEXT_EXTRACTORS = {
+    "url": lambda s: url_extractor.extract(s),
+    "doi": lambda s: doi_extractor.extract(s),
+}
+
 st.set_page_config(page_title="Metadata Harvester", layout="centered")
 st.title("Metadata Harvester")
 st.caption("Extract and normalize metadata to Dublin Core. Drop a file or paste a URL/DOI — the type is detected automatically.")
@@ -31,35 +42,23 @@ if extract_btn:
         if uploaded_file:
             ext = uploaded_file.name.rsplit(".", 1)[-1].lower()
             file_bytes = uploaded_file.read()
-            if ext == "pdf":
-                with st.spinner("Reading PDF metadata..."):
-                    raw_dict = pdf_extractor.extract(file_bytes)
-            elif ext == "txt":
-                with st.spinner("Reading text file..."):
-                    raw_dict = txt_extractor.extract(file_bytes, uploaded_file.name)
-            elif ext == "csv":
-                with st.spinner("Reading CSV file..."):
-                    raw_dict = csv_extractor.extract(file_bytes, uploaded_file.name)
+            with st.spinner(f"Reading {ext.upper()} file..."):
+                raw_dict = FILE_EXTRACTORS[ext](file_bytes, uploaded_file.name)
             input_label = uploaded_file.name
 
         elif user_input:
             with st.spinner("Classifying input..."):
                 input_type = classify(user_input)
             st.info(f"Detected input type: **{input_type.upper()}**")
-
-            if input_type == "url":
-                with st.spinner("Fetching page metadata..."):
-                    raw_dict = url_extractor.extract(user_input)
-            else:  # doi
-                with st.spinner("Querying CrossRef..."):
-                    raw_dict = doi_extractor.extract(user_input)
+            with st.spinner("Extracting metadata..."):
+                raw_dict = TEXT_EXTRACTORS[input_type](user_input)
             input_label = user_input
 
         else:
             st.error("Please upload a PDF or enter a URL/DOI.")
             st.stop()
 
-        with st.spinner("Enriching with Gemini..."):
+        with st.spinner("Enriching with LLM..."):
             enriched = enrich(raw_dict)
 
         dc_model = normalize(enriched)

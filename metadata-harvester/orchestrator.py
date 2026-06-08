@@ -2,13 +2,20 @@ import json
 import os
 import re
 
-import google.generativeai as genai
+from groq import Groq
 from dotenv import load_dotenv
 
 load_dotenv()
-genai.configure(api_key=os.environ["GEMINI_API_KEY"])
+_client = Groq(api_key=os.environ["GROQ_API_KEY"])
+_MODEL = "llama-3.1-8b-instant"
 
-_model = genai.GenerativeModel("gemini-2.5-flash")
+
+def _generate(prompt: str) -> str:
+    response = _client.chat.completions.create(
+        model=_MODEL,
+        messages=[{"role": "user", "content": prompt}],
+    )
+    return response.choices[0].message.content
 
 DC_ELEMENTS = [
     "title", "creator", "subject", "description", "publisher",
@@ -28,8 +35,7 @@ def classify(input_str: str) -> str:
         "Respond with a single word: pdf, url, or doi.\n\n"
         f"Input: {input_str}"
     )
-    response = _model.generate_content(prompt)
-    result = response.text.strip().lower()
+    result = _generate(prompt).strip().lower()
     for t in ("pdf", "url", "doi"):
         if t in result:
             return t
@@ -44,11 +50,11 @@ def enrich(raw_dict: dict) -> dict:
         f"Return ONLY valid JSON with exactly these keys (omit keys you cannot fill): {keys}\n\n"
         f"Raw metadata:\n{json.dumps(raw_dict, indent=2)}"
     )
-    response = _model.generate_content(prompt)
-    text = response.text.strip()
+    text = _generate(prompt)
 
-    # Strip markdown code fences if present
-    text = re.sub(r"^```(?:json)?\s*", "", text)
-    text = re.sub(r"\s*```$", "", text)
+    # Extract the first JSON object from the response
+    match = re.search(r"\{.*\}", text, re.DOTALL)
+    if not match:
+        raise ValueError(f"No JSON found in LLM response: {text!r}")
 
-    return json.loads(text)
+    return json.loads(match.group())
